@@ -10,6 +10,7 @@ import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
+import { ServiceEnvironmentVariables } from '@src/routes/DeploymentRoutes';
 
 type DeploymentMetadata = {
     id: string,
@@ -59,7 +60,31 @@ function getInstancesOrThrow(instances?: Array<Instance | undefined>) {
     return awsInstance;
 }
 
-async function Deploy(organizationId: string, keys: DeploymentKey) {
+async function getServiceEnvrionmentVariables(serviceEnvironmentVariables: ServiceEnvironmentVariables, serviceId: string) {
+    const service = await prisma.service.findUnique({
+        where: {
+            id: serviceId,
+        },
+        include: {
+            EnvironmentVariable: true,
+        },
+    });
+
+    if (!service) {
+        throw new Error(`Service ${serviceId} not found`);
+    }
+
+    const envVars = service.EnvironmentVariable.map(envVar => {
+        return {
+            // get the value from the request if it exists, otherwise use the value from the database - which is a default value which might not work or make sense!
+            [envVar.key]: serviceEnvironmentVariables[envVar.key] || envVar.value,
+        };
+    });
+
+    return envVars;
+}
+
+async function Deploy(organizationId: string, serviceEnvironmentVariables: ServiceEnvironmentVariables, keys: DeploymentKey) {
     const organization = await prisma.organization.findUnique({
         where: {
             id: organizationId,
@@ -78,7 +103,10 @@ async function Deploy(organizationId: string, keys: DeploymentKey) {
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
-    const script = organization.Service[0].script.trim();
+    const service = organization.Service[0];
+    const script = service.script.trim();
+    const envVars = await getServiceEnvrionmentVariables(serviceEnvironmentVariables, service.id);
+    console.log("serviceEnvironmentVariables", service.title, envVars);
     console.log(script);
     const base64Script = encode(script);
     console.log(base64Script);

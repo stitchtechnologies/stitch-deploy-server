@@ -2,8 +2,14 @@ import HttpStatusCodes from '@src/constants/HttpStatusCodes';
 import { IReq, IRes } from './types/express/misc';
 import DeployService from '@src/services/DeployService';
 
-async function startDeployment(req: IReq<{ organizationId: string, accessKey: string, secret: string }>, res: IRes) {
-    const response = await DeployService.Deploy(req.body.organizationId, {
+export type ServiceEnvironmentVariables = {
+    [serviceId: string]: {
+        [key: string]: string
+    }
+};
+
+async function startDeployment(req: IReq<{ organizationId: string, accessKey: string, secret: string, serviceEnvironmentVariables: ServiceEnvironmentVariables }>, res: IRes) {
+    const response = await DeployService.Deploy(req.body.organizationId, req.body.serviceEnvironmentVariables, {
         accessKey: req.body.accessKey,
         secretAccessKey: req.body.secret,
     });
