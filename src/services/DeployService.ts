@@ -77,7 +77,7 @@ async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: Serv
     const envVars = service.EnvironmentVariable.map(envVar => {
         return {
             // get the value from the request if it exists, otherwise use the value from the database - which is a default value which might not work or make sense!
-            [envVar.key]: servicesEnvironmentVariables[envVar.key] || envVar.value,
+            [envVar.key]: servicesEnvironmentVariables[serviceId][envVar.key] || envVar.value,
         };
     });
 
