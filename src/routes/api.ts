@@ -50,13 +50,13 @@ apiRouter.use(Paths.Users.Base, userRouter);
 const deployRouter = Router();
 deployRouter.get(
   Paths.Deploy.Status,
-  DeploymentRoutes.getDeploymentStatus
-)
+  DeploymentRoutes.getDeploymentStatus,
+);
 
 deployRouter.post(
   Paths.Deploy.Start,
-  DeploymentRoutes.startDeployment
-)
+  DeploymentRoutes.startDeployment,
+);
 
 apiRouter.use(Paths.Deploy.Base, deployRouter);
 
