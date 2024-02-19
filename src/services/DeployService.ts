@@ -79,9 +79,9 @@ async function Deploy(organizationId: string, keys: DeploymentKey) {
 
     // TODO we are currently assuming there is only one service and one script per organization
     const script = organization.Service[0].script.trim();
-    console.log(script)
+    console.log(script);
     const base64Script = encode(script);
-    console.log(base64Script)
+    console.log(base64Script);
 
     const params = {
         ImageId: 'ami-0e731c8a588258d0d',
@@ -96,10 +96,10 @@ async function Deploy(organizationId: string, keys: DeploymentKey) {
                     {
                         Key: 'Name',
                         Value: `${organization.Service[0].title} ${new Date().toISOString()}`,
-                    }
-                ]
-            }
-        ]
+                    },
+                ],
+            },
+        ],
     };
 
     try {
@@ -167,12 +167,12 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
             id: deployment.organizationId,
         },
         include: {
-            Service: true
+            Service: true,
         },
     });
-
-
-    deployment.url = `http://${publicDnsName}${(":" + organization?.Service[0].port) || ""}`;
+    const service = organization!.Service[0];
+    const { port } = service;
+    deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
     deployment.status = 'booted';
 }
 
