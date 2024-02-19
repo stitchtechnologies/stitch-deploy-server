@@ -16,6 +16,7 @@ type DeploymentMetadata = {
     awsInstanceId: string,
     status: 'deployed' | 'booting' | 'booted' | 'validating' | 'complete',
     url?: string
+    organizationId: string
 }
 
 type DeploymentKey = {
@@ -117,6 +118,7 @@ async function Deploy(organizationId: string, keys: DeploymentKey) {
             id,
             status: 'deployed',
             awsInstanceId,
+            organizationId,
         };
         return deployments[id];
     } catch (err) {
@@ -160,7 +162,17 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
         return;
     }
 
-    deployment.url = `http://${publicDnsName}:3000`;
+    const organization = await prisma.organization.findUnique({
+        where: {
+            id: deployment.organizationId,
+        },
+        include: {
+            Service: true
+        },
+    });
+
+
+    deployment.url = `http://${publicDnsName}${(":" + organization?.Service[0].port) || ""}`;
     deployment.status = 'booted';
 }
 

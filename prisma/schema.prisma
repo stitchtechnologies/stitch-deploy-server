@@ -35,6 +35,7 @@ model Service {
   externalUrl         String                @db.VarChar(255)
   readMe              String
   script              String
+  port                String?               @db.VarChar(255)
   EnvironmentVariable EnvironmentVariable[]
   Organization        Organization?         @relation(fields: [organizationId], references: [id])
 }
