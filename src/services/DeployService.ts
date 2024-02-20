@@ -9,16 +9,22 @@ import {
 import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
+import { DeploymentScript, DockerDeploymentScript } from '@src/models/deploy';
+import { readFileSync } from "fs";
+
 
 type DeploymentMetadata = {
     id: string,
     awsInstanceId: string,
     status: 'deployed' | 'booting' | 'booted' | 'validating' | 'complete',
     url?: string
+    publicDns?: string
     vendorId: string
     serviceId: string
+    validationUrl: string | null
+    userFriendlyUrl?: string;
 }
 
 type DeploymentKey = {
@@ -108,6 +114,45 @@ function combineScripts(mainScript: string, envScript: string) {
     return combinedScript;
 }
 
+function generateDockerScript(dockerScript: DockerDeploymentScript) {
+    let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
+    installDockerScript += "\n";
+    if (dockerScript.portMappings.length <= 0) {
+        installDockerScript += `docker run -d ${dockerScript.image}`;
+        return installDockerScript;
+    }
+
+    const portMappings = dockerScript.portMappings.map(pm => `${pm.serverPort}:${pm.containerPort}`);
+    installDockerScript += `docker run -d -p ${portMappings} ${dockerScript.image}`;
+    return installDockerScript;
+}
+
+function generateV2Script(service: Service) {
+    const deploymentScript = service.scriptV2 as DeploymentScript;
+
+    switch (deploymentScript.type) {
+        case 'docker':
+            return generateDockerScript(deploymentScript);
+        case 'shell':
+            return service.script.trim();
+        case 'docker-compose':
+            return "";
+    }
+    throw new Error("script not defined");
+}
+
+function generateLegacyScript(service: Service) {
+    return "";
+}
+
+function generateUserDataScript(service: Service) {
+    if (service.scriptV2) {
+        return generateV2Script(service);
+    }
+
+    return service.script.trim();
+}
+
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
     const service = await prisma.service.findUnique({
         where: {
@@ -124,12 +169,12 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
-    const script = service.script.trim();
+    const script = generateUserDataScript(service);
+    console.log("script", script);
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
     const envFileScript = generateEnvFileScript(envVars)
     const finalScript = combineScripts(script, envFileScript);
     const base64Script = encode(finalScript);
-    console.log(base64Script);
 
     const params = {
         ImageId: 'ami-0e731c8a588258d0d',
@@ -155,7 +200,6 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
         deploymentKeys[id] = { ...keys };
         const ec2Client = getEc2Client(id);
         const data = await ec2Client.send(new RunInstancesCommand(params));
-        console.log('data', data);
 
         const awsInstanceId = getInstancesOrThrow(data.Instances).InstanceId;
         if (!awsInstanceId) {
@@ -168,6 +212,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             awsInstanceId,
             vendorId,
             serviceId,
+            validationUrl: service.validationUrl
         };
         return deployments[id];
     } catch (err) {
@@ -217,11 +262,23 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
     const { port } = service!;
     deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
     deployment.status = 'booted';
+    deployment.publicDns = publicDnsName;
+
+    deployment.userFriendlyUrl = deployment.url;
+    if (deployment.validationUrl) {
+        deployment.userFriendlyUrl = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!);
+    }
 }
 
 async function tryValidateService(deployment: DeploymentMetadata) {
     try {
-        const response = await axios.get(deployment.url!);
+        let url = deployment.url;
+        if (deployment.validationUrl) {
+            url = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!)
+        }
+        console.log("url ping", url);
+        const response = await axios.get(url!);
+        console.log("response", response);
         if ((response.status - 200) < 100) {
             deployment.status = 'complete';
         }
