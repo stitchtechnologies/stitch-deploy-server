@@ -23,6 +23,5 @@ sudo supabase start
 
 sudo -s 
 
-
 docker-compose pull
 docker-compose up -d

@@ -1,13 +1,5 @@
 #!/bin/bash
-
-sudo yum install docker -y
-
-# install docker-compose
-sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-sudo systemctl start docker
-
+cd /home/ec2-user
 
 cat << EOF > docker-compose.yml
 version: "3.9"
@@ -54,15 +46,22 @@ volumes:
   twenty-db-data:
 EOF
 
-env_content="PG_DATABASE_URL=postgres://twenty:twenty@postgres:5432/default
+cat << EOF > .env
+PG_DATABASE_URL=postgres://twenty:twenty@postgres:5432/default
 FRONT_BASE_URL=http://localhost:3001
 ACCESS_TOKEN_SECRET=replace_me_with_a_random_string_access
 LOGIN_TOKEN_SECRET=replace_me_with_a_random_string_login
 REFRESH_TOKEN_SECRET=replace_me_with_a_random_string_refresh
 SIGN_IN_PREFILLED=true
-TAG=latest"
+TAG=latest
+EOF
 
-# Write the content to the .env file
-echo "$env_content" > .env
+sudo yum install docker -y
+
+# install docker-compose
+sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+sudo systemctl start docker
 
 sudo docker-compose up -d

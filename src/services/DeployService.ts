@@ -85,6 +85,29 @@ async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: Serv
     return envVars;
 }
 
+function generateEnvFileScript(servicesEnvironmentVariables: Record<string, string>[]) {
+    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join("\n");
+    return `cat << EOF > .env
+${keyValues}
+EOF
+source .env`;
+}
+
+function combineScripts(mainScript: string, envScript: string) {
+    let combinedScript = "";
+    const hasHeader = mainScript.trim().startsWith("#!/bin/bash");
+    if (hasHeader) {
+        combinedScript += "#!/bin/bash\n";
+    }
+    combinedScript += envScript;
+    combinedScript += "\n";
+
+    if (hasHeader) {
+        combinedScript += mainScript.replace("#!/bin/bash", "");
+    }
+    return combinedScript;
+}
+
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
     const service = await prisma.service.findUnique({
         where: {
@@ -103,9 +126,9 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     // TODO we are currently assuming there is only one service and one script per organization
     const script = service.script.trim();
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
-    console.log("servicesEnvironmentVariables", service.title, envVars);
-    console.log(script);
-    const base64Script = encode(script);
+    const envFileScript = generateEnvFileScript(envVars)
+    const finalScript = combineScripts(script, envFileScript);
+    const base64Script = encode(finalScript);
     console.log(base64Script);
 
     const params = {
@@ -174,8 +197,6 @@ async function Status(id: string) {
 }
 
 async function tryGetPublicDns(deployment: DeploymentMetadata) {
-    console.log('tryGetPublicDns', deployment);
-
     deployment.status = 'booting';
     const ec2Client = getEc2Client(deployment.id);
     const data = await ec2Client.send(new DescribeInstancesCommand({
@@ -199,7 +220,6 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
 }
 
 async function tryValidateService(deployment: DeploymentMetadata) {
-    console.log('tryValidateService', deployment);
     try {
         const response = await axios.get(deployment.url!);
         if ((response.status - 200) < 100) {
