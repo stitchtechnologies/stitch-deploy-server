@@ -17,7 +17,8 @@ type DeploymentMetadata = {
     awsInstanceId: string,
     status: 'deployed' | 'booting' | 'booted' | 'validating' | 'complete',
     url?: string
-    organizationId: string
+    vendorId: string
+    serviceId: string
 }
 
 type DeploymentKey = {
@@ -84,26 +85,22 @@ async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: Serv
     return envVars;
 }
 
-async function Deploy(organizationId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
-    const organization = await prisma.organization.findUnique({
+async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
+    const service = await prisma.service.findUnique({
         where: {
-            id: organizationId,
+            id: serviceId,
+            vendorId: vendorId,
         },
         include: {
-            Service: {
-                include: {
-                    EnvironmentVariable: true,
-                },
-            },
+            EnvironmentVariable: true,
         },
     });
 
-    if (!organization) {
-        throw new Error(`Organization ${organizationId} not found`);
+    if (!service) {
+        throw new Error(`Service ${serviceId} (vendor: ${vendorId}) not found`);
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
-    const service = organization.Service[0];
     const script = service.script.trim();
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
     console.log("servicesEnvironmentVariables", service.title, envVars);
@@ -123,7 +120,7 @@ async function Deploy(organizationId: string, servicesEnvironmentVariables: Serv
                 Tags: [
                     {
                         Key: 'Name',
-                        Value: `${organization.Service[0].title} ${new Date().toISOString()}`,
+                        Value: `${service.title} ${new Date().toISOString()}`,
                     },
                 ],
             },
@@ -146,7 +143,8 @@ async function Deploy(organizationId: string, servicesEnvironmentVariables: Serv
             id,
             status: 'deployed',
             awsInstanceId,
-            organizationId,
+            vendorId,
+            serviceId,
         };
         return deployments[id];
     } catch (err) {
@@ -190,16 +188,12 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
         return;
     }
 
-    const organization = await prisma.organization.findUnique({
+    const service = await prisma.service.findUnique({
         where: {
-            id: deployment.organizationId,
-        },
-        include: {
-            Service: true,
-        },
+            id: deployment.serviceId,
+        }
     });
-    const service = organization!.Service[0];
-    const { port } = service;
+    const { port } = service!;
     deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
     deployment.status = 'booted';
 }

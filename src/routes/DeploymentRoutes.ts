@@ -8,8 +8,8 @@ export type ServicesEnvironmentVariables = {
     }
 };
 
-async function startDeployment(req: IReq<{ organizationId: string, accessKey: string, secret: string, servicesEnvironmentVariables: ServicesEnvironmentVariables }>, res: IRes) {
-    const response = await DeployService.Deploy(req.body.organizationId, req.body.servicesEnvironmentVariables, {
+async function startDeployment(req: IReq<{ vendorId: string, serviceId: string, accessKey: string, secret: string, servicesEnvironmentVariables: ServicesEnvironmentVariables }>, res: IRes) {
+    const response = await DeployService.Deploy(req.body.vendorId, req.body.serviceId, req.body.servicesEnvironmentVariables, {
         accessKey: req.body.accessKey,
         secretAccessKey: req.body.secret,
     });
