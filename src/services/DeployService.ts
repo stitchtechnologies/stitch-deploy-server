@@ -11,9 +11,9 @@ import { v4 } from 'uuid';
 import axios from 'axios';
 import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
-import { DeploymentScript, DockerDeploymentScript } from '@src/models/deploy';
+import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript } from '@src/models/deploy';
 import { readFileSync } from "fs";
-
+import convertToDockerRunCommands from "decomposerize";
 
 type DeploymentMetadata = {
     id: string,
@@ -127,6 +127,22 @@ function generateDockerScript(dockerScript: DockerDeploymentScript) {
     return installDockerScript;
 }
 
+export function generateDockerComposeScript(dockerComposeScript: DockerComposeDeploymentScript) {
+    let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
+    installDockerScript += "\n";
+    installDockerScript += "mkdir stitch && cd stitch";
+    installDockerScript += "\n";
+
+    installDockerScript += `cat << EOF > docker-compose.yml
+${dockerComposeScript.composeFile}
+EOF    `
+
+    installDockerScript += "\n";
+    installDockerScript += "sudo docker-compose -d";
+
+    return installDockerScript;
+}
+
 function generateV2Script(service: Service) {
     const deploymentScript = service.scriptV2 as DeploymentScript;
 
@@ -136,13 +152,9 @@ function generateV2Script(service: Service) {
         case 'shell':
             return service.script.trim();
         case 'docker-compose':
-            return "";
+            return generateDockerComposeScript(deploymentScript);
     }
     throw new Error("script not defined");
-}
-
-function generateLegacyScript(service: Service) {
-    return "";
 }
 
 function generateUserDataScript(service: Service) {
