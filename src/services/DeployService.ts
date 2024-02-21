@@ -135,10 +135,10 @@ export function generateDockerComposeScript(dockerComposeScript: DockerComposeDe
 
     installDockerScript += `cat << EOF > docker-compose.yml
 ${dockerComposeScript.composeFile}
-EOF    `
+EOF`
 
     installDockerScript += "\n";
-    installDockerScript += "sudo docker-compose -d";
+    installDockerScript += "sudo docker-compose up -d";
 
     return installDockerScript;
 }
