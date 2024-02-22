@@ -145,12 +145,11 @@ EOF`
 
 function generateV2Script(service: Service) {
     const deploymentScript = service.scriptV2 as DeploymentScript;
-
     switch (deploymentScript.type) {
         case 'docker':
             return generateDockerScript(deploymentScript);
         case 'shell':
-            return service.script.trim();
+            return deploymentScript.script;
         case 'docker-compose':
             return generateDockerComposeScript(deploymentScript);
     }
@@ -273,13 +272,16 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
     });
     const { port } = service!;
     deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
-    deployment.status = 'booted';
     deployment.publicDns = publicDnsName;
 
     deployment.userFriendlyUrl = deployment.url;
     if (deployment.validationUrl) {
         deployment.userFriendlyUrl = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!);
+        deployment.status = 'booted';
+        return;
     }
+    // if validation url is not go straight to complete
+    deployment.status = 'complete';
 }
 
 async function tryValidateService(deployment: DeploymentMetadata) {
