@@ -1,3 +1,4 @@
+/* eslint-disable indent */
 import {
     DescribeInstancesCommand,
     EC2Client,
@@ -13,7 +14,6 @@ import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
 import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript } from '@src/models/deploy';
 import { readFileSync } from "fs";
-import convertToDockerRunCommands from "decomposerize";
 
 type DeploymentMetadata = {
     id: string,
@@ -84,9 +84,11 @@ async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: Serv
     const envVars = service.EnvironmentVariable.map(envVar => {
         return {
             // get the value from the request if it exists, otherwise use the value from the database - which is a default value which might not work or make sense!
-            [envVar.key]: servicesEnvironmentVariables[serviceId][envVar.key] || envVar.value,
+            [envVar.key]: servicesEnvironmentVariables[serviceId] ? servicesEnvironmentVariables[serviceId][envVar.key] || envVar.value : envVar.value,
         };
     });
+
+    console.log("envVars", envVars);
 
     return envVars;
 }
@@ -223,7 +225,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             awsInstanceId,
             vendorId,
             serviceId,
-            validationUrl: service.validationUrl
+            validationUrl: service.validationUrl,
         };
         return deployments[id];
     } catch (err) {
