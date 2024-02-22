@@ -289,7 +289,7 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
 async function tryValidateService(deployment: DeploymentMetadata) {
     try {
         let url = deployment.url;
-        if (deployment.validationUrl) {
+        if (deployment.validationUrl != null && deployment.validationUrl != "") {
             url = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!)
         }
         console.log("url ping", url);
