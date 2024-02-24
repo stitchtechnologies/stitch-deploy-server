@@ -12,7 +12,7 @@ import { v4 } from 'uuid';
 import axios from 'axios';
 import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
-import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript } from '@src/models/deploy';
+import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
 import { readFileSync } from "fs";
 
 type DeploymentMetadata = {
@@ -116,7 +116,7 @@ function combineScripts(mainScript: string, envScript: string) {
     return combinedScript;
 }
 
-function generateDockerScript(dockerScript: DockerDeploymentScript) {
+function generateDockerScript(dockerScript: DockerDeploymentScript | NextjsDeploymentScript) {
     let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
     installDockerScript += "\n";
     if (dockerScript.portMappings.length <= 0) {
@@ -149,6 +149,7 @@ function generateV2Script(service: Service) {
     const deploymentScript = service.scriptV2 as DeploymentScript;
     switch (deploymentScript.type) {
         case 'docker':
+        case 'next-js':
             return generateDockerScript(deploymentScript);
         case 'shell':
             return deploymentScript.script;
