@@ -14,4 +14,10 @@ export type ShellDeploymentScript = {
     script: string,
 }
 
-export type DeploymentScript = DockerDeploymentScript | ShellDeploymentScript | DockerComposeDeploymentScript;
+export type NextjsDeploymentScript = {
+    type: "next-js",
+    image: string,
+    portMappings: Array<{ containerPort: number, serverPort: number }>
+}
+
+export type DeploymentScript = DockerDeploymentScript | ShellDeploymentScript | DockerComposeDeploymentScript | NextjsDeploymentScript;
