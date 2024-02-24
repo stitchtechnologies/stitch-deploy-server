@@ -120,12 +120,12 @@ function generateDockerScript(dockerScript: DockerDeploymentScript) {
     let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
     installDockerScript += "\n";
     if (dockerScript.portMappings.length <= 0) {
-        installDockerScript += `docker run -d ${dockerScript.image}`;
+        installDockerScript += `docker run --env-file .env -d ${dockerScript.image}`;
         return installDockerScript;
     }
 
     const portMappings = dockerScript.portMappings.map(pm => `${pm.serverPort}:${pm.containerPort}`);
-    installDockerScript += `docker run -d -p ${portMappings} ${dockerScript.image}`;
+    installDockerScript += `docker run --env-file .env -d -p ${portMappings} ${dockerScript.image}`;
     return installDockerScript;
 }
 
@@ -187,6 +187,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
     const envFileScript = generateEnvFileScript(envVars)
     const finalScript = combineScripts(script, envFileScript);
+    console.log("finalScript", finalScript);
     const base64Script = encode(finalScript);
 
     const params = {
