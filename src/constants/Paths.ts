@@ -15,6 +15,10 @@ export default {
   Deploy: {
     Base: '/deploy',
     Start: '/start',
-    Status: '/status/:id'
-  }
+    Status: '/status/:id',
+  },
+  Ping: {
+    Base: '/agent',
+    PingAgent: '/ping',
+  },
 } as const;

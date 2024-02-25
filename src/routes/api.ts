@@ -5,6 +5,7 @@ import Paths from '../constants/Paths';
 import User from '@src/models/User';
 import UserRoutes from './UserRoutes';
 import DeploymentRoutes from './DeploymentRoutes';
+import PingRoutes from './PingRoutes';
 
 
 // **** Variables **** //
@@ -48,6 +49,7 @@ userRouter.delete(
 apiRouter.use(Paths.Users.Base, userRouter);
 
 const deployRouter = Router();
+
 deployRouter.get(
   Paths.Deploy.Status,
   DeploymentRoutes.getDeploymentStatus,
@@ -60,6 +62,15 @@ deployRouter.post(
 
 apiRouter.use(Paths.Deploy.Base, deployRouter);
 
+
+const pingRouter = Router();
+
+pingRouter.post(
+  Paths.Ping.PingAgent,
+  PingRoutes.agentPing,
+);
+
+apiRouter.use(Paths.Ping.Base, pingRouter);
 
 // **** Export default **** //
 
