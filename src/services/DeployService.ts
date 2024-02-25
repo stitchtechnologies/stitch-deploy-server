@@ -33,7 +33,9 @@ type DeploymentMetadata = {
 
 type DeploymentKey = {
     accessKey: string,
-    secretAccessKey: string
+    secretAccessKey: string,
+    accountNumber?: string,
+    awsRegion?: string
 }
 
 const AWS_REGION = 'us-east-1';
@@ -171,7 +173,10 @@ function generateUserDataScript(service: Service) {
     return service.script.trim();
 }
 
-export async function deployCdk(deploymentId: string, script: CdkTypescriptGithubDeploymentScript) {
+export async function deployCdk(deploymentId: string, keys: DeploymentKey, script: CdkTypescriptGithubDeploymentScript) {
+    if (!keys.accountNumber || !keys.awsRegion) {
+        throw new Error("AWS region and account number are required for CDK deployments");
+    }
     const dir = `./installs/${deploymentId}`;
     mkdirSync(dir);
     await git.clone({
@@ -182,9 +187,13 @@ export async function deployCdk(deploymentId: string, script: CdkTypescriptGithu
             };
         },
     });
+    shell.env["AWS_ACCESS_KEY_ID"] = keys.accessKey;
+    shell.env["AWS_SECRET_ACCESS_KEY"] = keys.secretAccessKey;
+    shell.env["AWS_DEFAULT_REGION"] = keys.awsRegion ?? "us-east-1";
     shell.cd(dir);
-    shell.exec('npm install');
-    const synthCommand = shell.exec('cdk deploy --require-approval never');
+    shell.exec("npm install");
+    shell.exec(`cdk bootstrap aws://${keys.accountNumber}/${keys.awsRegion} --require-approval never`);
+    shell.exec("cdk deploy --require-approval never");
 }
 
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
@@ -207,8 +216,20 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
 
     const scriptV2 = service.scriptV2 as DeploymentScript | undefined;
     if (scriptV2 && scriptV2.type === 'cdk-ts-github') {
-        deployCdk(deploymentId, scriptV2);
-        return;
+        deployments[deploymentId] = {
+            id: deploymentId,
+            status: 'deployed',
+            awsInstanceId: "",
+            vendorId,
+            serviceId,
+            validationUrl: service.validationUrl,
+        };
+
+        deployCdk(deploymentId, keys, scriptV2).then(() => {
+            deployments[deploymentId].status = 'complete';
+        });
+
+        return deployments[deploymentId];
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
