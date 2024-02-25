@@ -51,5 +51,6 @@ model Install {
   id        String   @id
   createdAt DateTime @default(now()) @db.Timestamp(6)
   serviceId String
+  status    String?  @db.VarChar(255)
   Service   Service  @relation(fields: [serviceId], references: [id])
 }

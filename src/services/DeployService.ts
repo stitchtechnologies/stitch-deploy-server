@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /* eslint-disable indent */
 import {
     DescribeInstancesCommand,
@@ -13,11 +14,10 @@ import axios from 'axios';
 import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
 import { CdkTypescriptGithubDeploymentScript, DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
-import fs, { readFileSync, mkdirSync } from "fs";
-import git from "isomorphic-git";
-import http from 'isomorphic-git/http/node'
-import { url } from 'inspector';
-import shell from "shelljs";
+import fs, { readFileSync, mkdirSync } from 'fs';
+import git from 'isomorphic-git';
+import http from 'isomorphic-git/http/node';
+import shell from 'shelljs';
 
 type DeploymentMetadata = {
     id: string,
@@ -92,13 +92,13 @@ async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: Serv
         };
     });
 
-    console.log("envVars", envVars);
+    console.log('envVars', envVars);
 
     return envVars;
 }
 
 function generateEnvFileScript(servicesEnvironmentVariables: Record<string, string>[]) {
-    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join("\n");
+    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join('\n');
     return `cat << EOF > .env
 ${keyValues}
 EOF
@@ -106,23 +106,23 @@ source .env`;
 }
 
 function combineScripts(mainScript: string, envScript: string) {
-    let combinedScript = "";
-    const hasHeader = mainScript.trim().startsWith("#!/bin/bash");
+    let combinedScript = '';
+    const hasHeader = mainScript.trim().startsWith('#!/bin/bash');
     if (hasHeader) {
-        combinedScript += "#!/bin/bash\n";
+        combinedScript += '#!/bin/bash\n';
     }
     combinedScript += envScript;
-    combinedScript += "\n";
+    combinedScript += '\n';
 
     if (hasHeader) {
-        combinedScript += mainScript.replace("#!/bin/bash", "");
+        combinedScript += mainScript.replace('#!/bin/bash', '');
     }
     return combinedScript;
 }
 
 function generateDockerScript(dockerScript: DockerDeploymentScript | NextjsDeploymentScript) {
-    let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
-    installDockerScript += "\n";
+    let installDockerScript = readFileSync('./src/deploymentScripts/installDocker.sh', 'utf8');
+    installDockerScript += '\n';
     if (dockerScript.portMappings.length <= 0) {
         installDockerScript += `docker run -d ${dockerScript.image}`;
         return installDockerScript;
@@ -134,17 +134,17 @@ function generateDockerScript(dockerScript: DockerDeploymentScript | NextjsDeplo
 }
 
 export function generateDockerComposeScript(dockerComposeScript: DockerComposeDeploymentScript) {
-    let installDockerScript = readFileSync("./src/deploymentScripts/installDocker.sh", "utf8")
-    installDockerScript += "\n";
-    installDockerScript += "mkdir stitch && cd stitch";
-    installDockerScript += "\n";
+    let installDockerScript = readFileSync('./src/deploymentScripts/installDocker.sh', 'utf8');
+    installDockerScript += '\n';
+    installDockerScript += 'mkdir stitch && cd stitch';
+    installDockerScript += '\n';
 
     installDockerScript += `cat << EOF > docker-compose.yml
 ${dockerComposeScript.composeFile}
-EOF`
+EOF`;
 
-    installDockerScript += "\n";
-    installDockerScript += "sudo docker-compose up -d";
+    installDockerScript += '\n';
+    installDockerScript += 'sudo docker-compose up -d';
 
     return installDockerScript;
 }
@@ -160,7 +160,7 @@ function generateV2Script(service: Service) {
         case 'docker-compose':
             return generateDockerComposeScript(deploymentScript);
     }
-    throw new Error("script not defined");
+    throw new Error('script not defined');
 }
 
 function generateUserDataScript(service: Service) {
@@ -178,13 +178,13 @@ export async function deployCdk(deploymentId: string, script: CdkTypescriptGithu
         fs, http, dir, url: script.repoUrl, onAuth: (url) => {
             return {
                 username: script.auth?.username,
-                password: script.auth?.accessToken
-            }
-        }
-    })
+                password: script.auth?.accessToken,
+            };
+        },
+    });
     shell.cd(dir);
-    shell.exec("npm install")
-    const synthCommand = shell.exec("cdk deploy --require-approval never")
+    shell.exec('npm install');
+    const synthCommand = shell.exec('cdk deploy --require-approval never');
 }
 
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
@@ -207,14 +207,14 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
 
     const scriptV2 = service.scriptV2 as DeploymentScript | undefined;
     if (scriptV2 && scriptV2.type === 'cdk-ts-github') {
-        deployCdk(deploymentId, scriptV2)
+        deployCdk(deploymentId, scriptV2);
         return;
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
     const script = generateUserDataScript(service);
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
-    const envFileScript = generateEnvFileScript(envVars)
+    const envFileScript = generateEnvFileScript(envVars);
     const finalScript = combineScripts(script, envFileScript);
     const base64Script = encode(finalScript);
 
@@ -255,6 +255,20 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             serviceId,
             validationUrl: service.validationUrl,
         };
+
+        // record the install in the database
+        await prisma.install.create({
+            data: {
+                id: deploymentId,
+                status: 'deployed',
+                Service: {
+                    connect: {
+                        id: serviceId,
+                    },
+                },
+            },
+        });
+
         return deployments[deploymentId];
     } catch (err) {
         console.error('error', err);
@@ -284,6 +298,14 @@ async function Status(id: string) {
 
 async function tryGetPublicDns(deployment: DeploymentMetadata) {
     deployment.status = 'booting';
+    await prisma.install.update({
+        where: {
+            id: deployment.id,
+        },
+        data: {
+            status: 'booting',
+        },
+    });
     const ec2Client = getEc2Client(deployment.id);
     const data = await ec2Client.send(new DescribeInstancesCommand({
         InstanceIds: [deployment.awsInstanceId],
@@ -298,7 +320,7 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
     const service = await prisma.service.findUnique({
         where: {
             id: deployment.serviceId,
-        }
+        },
     });
     const { port } = service!;
     deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
@@ -306,25 +328,49 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
 
     deployment.userFriendlyUrl = deployment.url;
     if (deployment.validationUrl) {
-        deployment.userFriendlyUrl = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!);
+        deployment.userFriendlyUrl = deployment.validationUrl.replace('{{HOSTNAME}}', deployment.publicDns);
         deployment.status = 'booted';
+        await prisma.install.update({
+            where: {
+                id: deployment.id,
+            },
+            data: {
+                status: 'booted',
+            },
+        });
         return;
     }
     // if validation url is not go straight to complete
     deployment.status = 'complete';
+    await prisma.install.update({
+        where: {
+            id: deployment.id,
+        },
+        data: {
+            status: 'complete',
+        },
+    });
 }
 
 async function tryValidateService(deployment: DeploymentMetadata) {
     try {
         let url = deployment.url;
-        if (deployment.validationUrl != null && deployment.validationUrl != "") {
-            url = deployment.validationUrl.replace("{{HOSTNAME}}", deployment.publicDns!)
+        if (deployment.validationUrl != null && deployment.validationUrl != '') {
+            url = deployment.validationUrl.replace('{{HOSTNAME}}', deployment.publicDns!);
         }
-        console.log("url ping", url);
+        console.log('url ping', url);
         const response = await axios.get(url!);
-        console.log("response", response);
+        console.log('response', response);
         if ((response.status - 200) < 100) {
             deployment.status = 'complete';
+            await prisma.install.update({
+                where: {
+                    id: deployment.id,
+                },
+                data: {
+                    status: 'complete',
+                },
+            });
         }
     } catch {
         // frontend will retry
