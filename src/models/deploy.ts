@@ -20,4 +20,13 @@ export type NextjsDeploymentScript = {
     portMappings: Array<{ containerPort: number, serverPort: number }>
 }
 
-export type DeploymentScript = DockerDeploymentScript | ShellDeploymentScript | DockerComposeDeploymentScript | NextjsDeploymentScript;
+export type CdkTypescriptGithubDeploymentScript = {
+    type: "cdk-ts-github",
+    repoUrl: string,
+    auth?: {
+        username: string,
+        accessToken: string
+    }
+}
+
+export type DeploymentScript = DockerDeploymentScript | ShellDeploymentScript | DockerComposeDeploymentScript | CdkTypescriptGithubDeploymentScript | NextjsDeploymentScript;

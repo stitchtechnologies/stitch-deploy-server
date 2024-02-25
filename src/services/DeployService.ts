@@ -12,8 +12,12 @@ import { v4 } from 'uuid';
 import axios from 'axios';
 import { PrismaClient, Service } from '@prisma/client';
 import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
-import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
-import { readFileSync } from "fs";
+import { CdkTypescriptGithubDeploymentScript, DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
+import fs, { readFileSync, mkdirSync } from "fs";
+import git from "isomorphic-git";
+import http from 'isomorphic-git/http/node'
+import { url } from 'inspector';
+import shell from "shelljs";
 
 type DeploymentMetadata = {
     id: string,
@@ -167,6 +171,22 @@ function generateUserDataScript(service: Service) {
     return service.script.trim();
 }
 
+export async function deployCdk(deploymentId: string, script: CdkTypescriptGithubDeploymentScript) {
+    const dir = `./installs/${deploymentId}`;
+    mkdirSync(dir);
+    await git.clone({
+        fs, http, dir, url: script.repoUrl, onAuth: (url) => {
+            return {
+                username: script.auth?.username,
+                password: script.auth?.accessToken
+            }
+        }
+    })
+    shell.cd(dir);
+    shell.exec("npm install")
+    const synthCommand = shell.exec("cdk deploy --require-approval never")
+}
+
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
     const service = await prisma.service.findUnique({
         where: {
@@ -182,9 +202,17 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
         throw new Error(`Service ${serviceId} (vendor: ${vendorId}) not found`);
     }
 
+    const deploymentId = v4();
+
+
+    const scriptV2 = service.scriptV2 as DeploymentScript | undefined;
+    if (scriptV2 && scriptV2.type === 'cdk-ts-github') {
+        deployCdk(deploymentId, scriptV2)
+        return;
+    }
+
     // TODO we are currently assuming there is only one service and one script per organization
     const script = generateUserDataScript(service);
-    console.log("script", script);
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
     const envFileScript = generateEnvFileScript(envVars)
     const finalScript = combineScripts(script, envFileScript);
@@ -210,9 +238,8 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     };
 
     try {
-        const id = v4();
-        deploymentKeys[id] = { ...keys };
-        const ec2Client = getEc2Client(id);
+        deploymentKeys[deploymentId] = { ...keys };
+        const ec2Client = getEc2Client(deploymentId);
         const data = await ec2Client.send(new RunInstancesCommand(params));
 
         const awsInstanceId = getInstancesOrThrow(data.Instances).InstanceId;
@@ -220,15 +247,15 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             throw new Error('AWS instance id not defined');
         }
 
-        deployments[id] = {
-            id,
+        deployments[deploymentId] = {
+            id: deploymentId,
             status: 'deployed',
             awsInstanceId,
             vendorId,
             serviceId,
             validationUrl: service.validationUrl,
         };
-        return deployments[id];
+        return deployments[deploymentId];
     } catch (err) {
         console.error('error', err);
     }
