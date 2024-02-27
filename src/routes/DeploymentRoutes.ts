@@ -1,12 +1,7 @@
 import HttpStatusCodes from '@src/constants/HttpStatusCodes';
 import { IReq, IRes } from './types/express/misc';
-import DeployService from '@src/services/DeployService';
-
-export type ServicesEnvironmentVariables = {
-    [serviceId: string]: {
-        [key: string]: string
-    }
-};
+import DeployService from '@src/services/deployService/DeployService';
+import { ServicesEnvironmentVariables } from '@src/services/deployService/types';
 
 async function startDeployment(req: IReq<{
     vendorId: string,

@@ -1,186 +1,32 @@
-/* eslint-disable max-len */
-/* eslint-disable indent */
 import {
     DescribeInstancesCommand,
-    EC2Client,
-    Instance,
     ResourceType,
     RunInstancesCommand,
-    _InstanceType,
 } from '@aws-sdk/client-ec2';
 import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
-import { PrismaClient, Service } from '@prisma/client';
-import { ServicesEnvironmentVariables } from '@src/routes/DeploymentRoutes';
-import { CdkTypescriptGithubDeploymentScript, DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
-import fs, { readFileSync, mkdirSync } from 'fs';
+import { CdkTypescriptGithubDeploymentScript, DeploymentScript } from '@src/models/deploy';
+import fs, { mkdirSync } from 'fs';
 import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/node';
 import shell from 'shelljs';
+import { DeploymentKey, DeploymentMetadata, IMAGE_ID, INSTANCE_TYPE, ServicesEnvironmentVariables } from './types';
+import { prisma } from './db';
+import { getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables } from './utils';
+import { combineScripts, generateEnvFileScript, generateUserDataScript } from './script-utils';
 
-type DeploymentMetadata = {
-    id: string,
-    awsInstanceId: string,
-    status: 'deployed' | 'booting' | 'booted' | 'validating' | 'complete',
-    url?: string
-    publicDns?: string
-    vendorId: string
-    serviceId: string
-    validationUrl: string | null
-    userFriendlyUrl?: string;
-}
+export const deployments: Record<string, DeploymentMetadata> = {};
+export const deploymentKeys: Record<string, DeploymentKey> = {};
 
-type DeploymentKey = {
-    accessKey: string,
-    secretAccessKey: string,
-    accountNumber?: string,
-    awsRegion?: string
-}
-
-const AWS_REGION = 'us-east-1';
-
-const prisma = new PrismaClient();
-
-const deployments: Record<string, DeploymentMetadata> = {};
-const deploymentKeys: Record<string, DeploymentKey> = {};
-
-const getEc2Client = (id: string) => {
-    const keys = deploymentKeys[id];
-    if (!keys) {
-        throw new Error('No keys found for this deployment');
-    }
-
-    return new EC2Client({
-        region: AWS_REGION,
-        credentials: {
-            accessKeyId: keys.accessKey,
-            secretAccessKey: keys.secretAccessKey,
-        },
-    });
-};
-
-function getInstancesOrThrow(instances?: Array<Instance | undefined>) {
-    if (instances && instances.length !== 1) {
-        throw new Error('Unexpected number of instances created');
-    }
-
-    const awsInstance = instances![0];
-    if (!awsInstance) {
-        throw new Error('InstanceId not defined');
-    }
-
-    return awsInstance;
-}
-
-async function getServiceEnvrionmentVariables(servicesEnvironmentVariables: ServicesEnvironmentVariables, serviceId: string) {
-    const service = await prisma.service.findUnique({
-        where: {
-            id: serviceId,
-        },
-        include: {
-            EnvironmentVariable: true,
-        },
-    });
-
-    if (!service) {
-        throw new Error(`Service ${serviceId} not found`);
-    }
-
-    const envVars = service.EnvironmentVariable.map(envVar => {
-        return {
-            // get the value from the request if it exists, otherwise use the value from the database - which is a default value which might not work or make sense!
-            [envVar.key]: servicesEnvironmentVariables[serviceId] ? servicesEnvironmentVariables[serviceId][envVar.key] || envVar.value : envVar.value,
-        };
-    });
-
-    console.log('envVars', envVars);
-
-    return envVars;
-}
-
-function generateEnvFileScript(servicesEnvironmentVariables: Record<string, string>[]) {
-    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join('\n');
-    return `cat << EOF > .env
-${keyValues}
-EOF
-source .env`;
-}
-
-function combineScripts(mainScript: string, envScript: string) {
-    let combinedScript = '';
-    const hasHeader = mainScript.trim().startsWith('#!/bin/bash');
-    if (hasHeader) {
-        combinedScript += '#!/bin/bash\n';
-    }
-    combinedScript += envScript;
-    combinedScript += '\n';
-
-    if (hasHeader) {
-        combinedScript += mainScript.replace('#!/bin/bash', '');
-    }
-    return combinedScript;
-}
-
-function generateDockerScript(dockerScript: DockerDeploymentScript | NextjsDeploymentScript) {
-    let installDockerScript = readFileSync('./src/deploymentScripts/installDocker.sh', 'utf8');
-    installDockerScript += '\n';
-    if (dockerScript.portMappings.length <= 0) {
-        installDockerScript += `docker run -d ${dockerScript.image}`;
-        return installDockerScript;
-    }
-
-    const portMappings = dockerScript.portMappings.map(pm => `${pm.serverPort}:${pm.containerPort}`);
-    installDockerScript += `docker run -d -p ${portMappings} ${dockerScript.image}`;
-    return installDockerScript;
-}
-
-export function generateDockerComposeScript(dockerComposeScript: DockerComposeDeploymentScript) {
-    let installDockerScript = readFileSync('./src/deploymentScripts/installDocker.sh', 'utf8');
-    installDockerScript += '\n';
-    installDockerScript += 'mkdir stitch && cd stitch';
-    installDockerScript += '\n';
-
-    installDockerScript += `cat << EOF > docker-compose.yml
-${dockerComposeScript.composeFile}
-EOF`;
-
-    installDockerScript += '\n';
-    installDockerScript += 'sudo docker-compose up -d';
-
-    return installDockerScript;
-}
-
-function generateV2Script(service: Service) {
-    const deploymentScript = service.scriptV2 as DeploymentScript;
-    switch (deploymentScript.type) {
-        case 'docker':
-        case 'next-js':
-            return generateDockerScript(deploymentScript);
-        case 'shell':
-            return deploymentScript.script;
-        case 'docker-compose':
-            return generateDockerComposeScript(deploymentScript);
-    }
-    throw new Error('script not defined');
-}
-
-function generateUserDataScript(service: Service) {
-    if (service.scriptV2) {
-        return generateV2Script(service);
-    }
-
-    return service.script.trim();
-}
-
-export async function deployCdk(deploymentId: string, keys: DeploymentKey, script: CdkTypescriptGithubDeploymentScript) {
+async function deployCdk(deploymentId: string, keys: DeploymentKey, script: CdkTypescriptGithubDeploymentScript) {
     if (!keys.accountNumber || !keys.awsRegion) {
         throw new Error("AWS region and account number are required for CDK deployments");
     }
     const dir = `./installs/${deploymentId}`;
     mkdirSync(dir);
     await git.clone({
-        fs, http, dir, url: script.repoUrl, onAuth: (url) => {
+        fs, http, dir, url: script.repoUrl, onAuth: () => {
             return {
                 username: script.auth?.username,
                 password: script.auth?.accessToken,
@@ -240,8 +86,8 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     const base64Script = encode(finalScript);
 
     const params = {
-        ImageId: 'ami-0e731c8a588258d0d',
-        InstanceType: 't2.medium' as _InstanceType,
+        ImageId: IMAGE_ID,
+        InstanceType: INSTANCE_TYPE,
         MinCount: 1,
         MaxCount: 1,
         UserData: base64Script,
