@@ -1,7 +1,12 @@
 
 import { Service } from '@prisma/client';
-import { DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
+import { CdkTypescriptGithubDeploymentScript, DeploymentScript, DockerComposeDeploymentScript, DockerDeploymentScript, NextjsDeploymentScript } from '@src/models/deploy';
 import { readFileSync } from 'fs';
+import { DeploymentKey } from './types';
+import fs, { mkdirSync } from 'fs';
+import git from 'isomorphic-git';
+import http from 'isomorphic-git/http/node';
+import shell from 'shelljs';
 
 export function generateEnvFileScript(servicesEnvironmentVariables: Record<string, string>[]) {
     const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join('\n');
@@ -24,6 +29,29 @@ export function combineScripts(mainScript: string, envScript: string) {
         combinedScript += mainScript.replace('#!/bin/bash', '');
     }
     return combinedScript;
+}
+
+export async function deployCdk(deploymentId: string, keys: DeploymentKey, script: CdkTypescriptGithubDeploymentScript) {
+    if (!keys.accountNumber || !keys.awsRegion) {
+        throw new Error("AWS region and account number are required for CDK deployments");
+    }
+    const dir = `./installs/${deploymentId}`;
+    mkdirSync(dir);
+    await git.clone({
+        fs, http, dir, url: script.repoUrl, onAuth: () => {
+            return {
+                username: script.auth?.username,
+                password: script.auth?.accessToken,
+            };
+        },
+    });
+    shell.env["AWS_ACCESS_KEY_ID"] = keys.accessKey;
+    shell.env["AWS_SECRET_ACCESS_KEY"] = keys.secretAccessKey;
+    shell.env["AWS_DEFAULT_REGION"] = keys.awsRegion ?? "us-east-1";
+    shell.cd(dir);
+    shell.exec("npm install");
+    shell.exec(`cdk bootstrap aws://${keys.accountNumber}/${keys.awsRegion} --require-approval never`);
+    shell.exec("cdk deploy --require-approval never");
 }
 
 export function generateDockerScript(dockerScript: DockerDeploymentScript | NextjsDeploymentScript) {

@@ -16,7 +16,7 @@ async function startDeployment(req: IReq<{
         accessKey: req.body.accessKey,
         secretAccessKey: req.body.secret,
         awsRegion: req.body.awsRegion,
-        accountNumber: req.body.accountNumber
+        accountNumber: req.body.accountNumber,
     });
     return res.status(HttpStatusCodes.OK).json(response);
 }
@@ -28,5 +28,5 @@ async function getDeploymentStatus(req: IReq, res: IRes) {
 
 export default {
     startDeployment,
-    getDeploymentStatus
+    getDeploymentStatus,
 } as const;

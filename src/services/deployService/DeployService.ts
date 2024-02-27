@@ -6,41 +6,12 @@ import {
 import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
-import { CdkTypescriptGithubDeploymentScript, DeploymentScript } from '@src/models/deploy';
-import fs, { mkdirSync } from 'fs';
-import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/node';
-import shell from 'shelljs';
-import { DeploymentKey, DeploymentMetadata, IMAGE_ID, INSTANCE_TYPE, ServicesEnvironmentVariables } from './types';
+import { DeploymentKey, IMAGE_ID, INSTANCE_TYPE, ServicesEnvironmentVariables } from './types';
 import { prisma } from './db';
-import { getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables } from './utils';
-import { combineScripts, generateEnvFileScript, generateUserDataScript } from './script-utils';
-
-export const deployments: Record<string, DeploymentMetadata> = {};
-export const deploymentKeys: Record<string, DeploymentKey> = {};
-
-async function deployCdk(deploymentId: string, keys: DeploymentKey, script: CdkTypescriptGithubDeploymentScript) {
-    if (!keys.accountNumber || !keys.awsRegion) {
-        throw new Error("AWS region and account number are required for CDK deployments");
-    }
-    const dir = `./installs/${deploymentId}`;
-    mkdirSync(dir);
-    await git.clone({
-        fs, http, dir, url: script.repoUrl, onAuth: () => {
-            return {
-                username: script.auth?.username,
-                password: script.auth?.accessToken,
-            };
-        },
-    });
-    shell.env["AWS_ACCESS_KEY_ID"] = keys.accessKey;
-    shell.env["AWS_SECRET_ACCESS_KEY"] = keys.secretAccessKey;
-    shell.env["AWS_DEFAULT_REGION"] = keys.awsRegion ?? "us-east-1";
-    shell.cd(dir);
-    shell.exec("npm install");
-    shell.exec(`cdk bootstrap aws://${keys.accountNumber}/${keys.awsRegion} --require-approval never`);
-    shell.exec("cdk deploy --require-approval never");
-}
+import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables, updateDeploymentStatus } from './utils';
+import { combineScripts, deployCdk, generateEnvFileScript, generateUserDataScript } from './script-utils';
+import { DeploymentScript } from '@src/models/deploy';
+import { Deployment } from '@prisma/client';
 
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
     const service = await prisma.service.findUnique({
@@ -59,23 +30,38 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
 
     const deploymentId = v4();
 
-
     const scriptV2 = service.scriptV2 as DeploymentScript | undefined;
     if (scriptV2 && scriptV2.type === 'cdk-ts-github') {
-        deployments[deploymentId] = {
-            id: deploymentId,
-            status: 'deployed',
-            awsInstanceId: "",
-            vendorId,
-            serviceId,
-            validationUrl: service.validationUrl,
-        };
-
-        deployCdk(deploymentId, keys, scriptV2).then(() => {
-            deployments[deploymentId].status = 'complete';
+        await prisma.deployment.create({
+            data: {
+                id: deploymentId,
+                status: 'deployed',
+                awsInstanceId: "",
+                url: "",
+                publicDns: "",
+                validationUrl: service.validationUrl,
+                userFriendlyUrl: "",
+                deploymentKey: keys,
+                Service: {
+                    connect: {
+                        id: serviceId,
+                    },
+                },
+                Vendor: {
+                    connect: {
+                        id: vendorId,
+                    },
+                },
+            },
         });
 
-        return deployments[deploymentId];
+        deployCdk(deploymentId, keys, scriptV2).then(async () => {
+            await updateDeploymentStatus(deploymentId, 'complete');
+        });
+
+        const deployment = await getDeployment(deploymentId);
+
+        return deployment;
     }
 
     // TODO we are currently assuming there is only one service and one script per organization
@@ -105,8 +91,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     };
 
     try {
-        deploymentKeys[deploymentId] = { ...keys };
-        const ec2Client = getEc2Client(deploymentId);
+        const ec2Client = getEc2Client(keys.accessKey, keys.secretAccessKey);
         const data = await ec2Client.send(new RunInstancesCommand(params));
 
         const awsInstanceId = getInstancesOrThrow(data.Instances).InstanceId;
@@ -114,14 +99,25 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             throw new Error('AWS instance id not defined');
         }
 
-        deployments[deploymentId] = {
-            id: deploymentId,
-            status: 'deployed',
-            awsInstanceId,
-            vendorId,
-            serviceId,
-            validationUrl: service.validationUrl,
-        };
+        const deployment = await prisma.deployment.create({
+            data: {
+                id: deploymentId,
+                status: 'deployed',
+                awsInstanceId,
+                validationUrl: service.validationUrl,
+                deploymentKey: keys,
+                Service: {
+                    connect: {
+                        id: serviceId,
+                    },
+                },
+                Vendor: {
+                    connect: {
+                        id: vendorId,
+                    },
+                },
+            },
+        });
 
         // record the install in the database
         await prisma.install.create({
@@ -136,18 +132,14 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             },
         });
 
-        return deployments[deploymentId];
+        return deployment;
     } catch (err) {
         console.error('error', err);
     }
 }
 
-
 async function Status(id: string) {
-    const deployment = deployments[id];
-    if (!deployment) {
-        throw new Error(`Couldn't find deployment ${id}`);
-    }
+    const deployment = await getDeployment(id);
 
     switch (deployment.status) {
         case 'deployed':
@@ -163,8 +155,8 @@ async function Status(id: string) {
     return deployment;
 }
 
-async function tryGetPublicDns(deployment: DeploymentMetadata) {
-    deployment.status = 'booting';
+async function tryGetPublicDns(deployment: Deployment) {
+    await updateDeploymentStatus(deployment.id, 'booting');
     await prisma.install.update({
         where: {
             id: deployment.id,
@@ -173,7 +165,8 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
             status: 'booting',
         },
     });
-    const ec2Client = getEc2Client(deployment.id);
+    const deploymentKey = await getDeploymentKey(deployment.id);
+    const ec2Client = getEc2Client(deploymentKey.accessKey, deploymentKey.secretAccessKey);
     const data = await ec2Client.send(new DescribeInstancesCommand({
         InstanceIds: [deployment.awsInstanceId],
     }));
@@ -190,13 +183,12 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
         },
     });
     const { port } = service!;
-    deployment.url = `http://${publicDnsName}${port ? ':' + port : ''}`;
-    deployment.publicDns = publicDnsName;
-
-    deployment.userFriendlyUrl = deployment.url;
+    const newUrl = `http://${publicDnsName}${port ? ':' + port : ''}`;
+    const newPublicDns = publicDnsName;
+    let newUserFriendlyUrl = deployment.url;
     if (deployment.validationUrl) {
-        deployment.userFriendlyUrl = deployment.validationUrl.replace('{{HOSTNAME}}', deployment.publicDns);
-        deployment.status = 'booted';
+        newUserFriendlyUrl = deployment.validationUrl.replace('{{HOSTNAME}}', newPublicDns);
+        await updateDeploymentStatus(deployment.id, 'booted');
         await prisma.install.update({
             where: {
                 id: deployment.id,
@@ -205,21 +197,31 @@ async function tryGetPublicDns(deployment: DeploymentMetadata) {
                 status: 'booted',
             },
         });
-        return;
+    } else {
+        // if validation url is not go straight to complete
+        await updateDeploymentStatus(deployment.id, 'complete');
+        await prisma.install.update({
+            where: {
+                id: deployment.id,
+            },
+            data: {
+                status: 'complete',
+            },
+        });
     }
-    // if validation url is not go straight to complete
-    deployment.status = 'complete';
-    await prisma.install.update({
+    await prisma.deployment.update({
         where: {
             id: deployment.id,
         },
         data: {
-            status: 'complete',
+            url: newUrl,
+            publicDns: newPublicDns,
+            userFriendlyUrl: newUserFriendlyUrl,
         },
     });
 }
 
-async function tryValidateService(deployment: DeploymentMetadata) {
+async function tryValidateService(deployment: Deployment) {
     try {
         let url = deployment.url;
         if (deployment.validationUrl != null && deployment.validationUrl != '') {
@@ -229,7 +231,7 @@ async function tryValidateService(deployment: DeploymentMetadata) {
         const response = await axios.get(url!);
         console.log('response', response);
         if ((response.status - 200) < 100) {
-            deployment.status = 'complete';
+            await updateDeploymentStatus(deployment.id, 'complete');
             await prisma.install.update({
                 where: {
                     id: deployment.id,

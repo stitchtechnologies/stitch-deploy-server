@@ -1,20 +1,52 @@
 import { EC2Client, Instance } from '@aws-sdk/client-ec2';
-import { deploymentKeys } from './DeployService';
 import { AWS_REGION, ServicesEnvironmentVariables } from './types';
 import { prisma } from './db';
+import { JsonObject } from '@prisma/client/runtime/library';
 
-export const getEc2Client = (id: string) => {
-    const keys = deploymentKeys[id];
+export const updateDeploymentStatus = async (id: string, status: string) => {
+    const deployment = await prisma.deployment.update({
+        where: {
+            id,
+        },
+        data: {
+            status,
+        },
+    });
+    return deployment;
+};
 
-    if (!keys) {
-        throw new Error('No keys found for this deployment');
+export const getDeployment = async (id: string) => {
+    const deployment = await prisma.deployment.findUnique({
+        where: {
+            id,
+        },
+    });
+
+    if (!deployment) {
+        throw new Error('Deployment not found');
     }
 
+    return deployment;
+};
+
+export const getDeploymentKey = async (deploymentId: string) => {
+    const deployment = await getDeployment(deploymentId);
+    const deploymentKey = deployment.deploymentKey as JsonObject;
+
+    return {
+        accessKey: deploymentKey.accessKey as string,
+        secretAccessKey: deploymentKey.secretAccessKey as string,
+        accountNumber: deploymentKey.accountNumber as string,
+        awsRegion: deploymentKey.awsRegion as string,
+    };
+};
+
+export const getEc2Client = (accessKeyId: string, secretAccessKey: string) => {
     return new EC2Client({
         region: AWS_REGION,
         credentials: {
-            accessKeyId: keys.accessKey,
-            secretAccessKey: keys.secretAccessKey,
+            accessKeyId,
+            secretAccessKey,
         },
     });
 };

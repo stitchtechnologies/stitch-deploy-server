@@ -19,7 +19,6 @@ export type DeploymentKey = {
     awsRegion?: string
 }
 
-
 export type ServicesEnvironmentVariables = {
     [serviceId: string]: {
         [key: string]: string
