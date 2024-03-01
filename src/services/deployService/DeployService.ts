@@ -12,6 +12,7 @@ import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, get
 import { combineScripts, deployCdk, generateEnvFileScript, generateUserDataScript } from './script-utils';
 import { DeploymentScript } from '@src/models/deploy';
 import { Deployment } from '@prisma/client';
+import logger from 'jet-logger';
 
 async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
     const service = await prisma.service.findUnique({
@@ -140,6 +141,30 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
 
 async function Status(id: string) {
     const deployment = await getDeployment(id);
+    const deploymentStatus = await updateStatus(deployment);
+    return deploymentStatus;
+}
+
+async function checkInstanceIsRunning(deployment: Deployment) {
+    const deploymentKey = await getDeploymentKey(deployment.id);
+    const ec2Client = getEc2Client(deploymentKey.accessKey, deploymentKey.secretAccessKey);
+    const data = await ec2Client.send(new DescribeInstancesCommand({
+        InstanceIds: [deployment.awsInstanceId],
+    }));
+    const instance = getInstancesOrThrow(data.Reservations?.flatMap(reservation => reservation.Instances));
+    if (instance.State?.Name === 'running') {
+        return true;
+    }
+    return false;
+}
+
+export async function updateStatus(deployment: Deployment) {
+    const deploymentInstanceIsRunning = await checkInstanceIsRunning(deployment);
+
+    if (!deploymentInstanceIsRunning) {
+        logger.warn(`Instance for deployment ${deployment.id} is not running`);
+        return deployment;
+    }
 
     switch (deployment.status) {
         case 'deployed':
@@ -152,7 +177,7 @@ async function Status(id: string) {
             break;
     }
 
-    return deployment;
+    return await getDeployment(deployment.id);
 }
 
 async function tryGetPublicDns(deployment: Deployment) {
@@ -227,9 +252,8 @@ async function tryValidateService(deployment: Deployment) {
         if (deployment.validationUrl != null && deployment.validationUrl != '') {
             url = deployment.validationUrl.replace('{{HOSTNAME}}', deployment.publicDns!);
         }
-        console.log('url ping', url);
+        logger.info(`Pinging ${url} for ${deployment.id}`);
         const response = await axios.get(url!);
-        console.log('response', response);
         if ((response.status - 200) < 100) {
             await updateDeploymentStatus(deployment.id, 'complete');
             await prisma.install.update({
