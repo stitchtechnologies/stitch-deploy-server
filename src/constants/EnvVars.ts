@@ -25,6 +25,7 @@ export default {
     Exp: (process.env.COOKIE_EXP ?? ''), // exp at the same time as the cookie
   },
   AwsCredentials: {
+    Region: process.env.AWS_REGION ?? '',
     AccessKey: process.env.AWS_ACCESS_KEY ?? '',
     Secret: process.env.AWS_SECRET ?? '',
   },
