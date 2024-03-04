@@ -95,7 +95,12 @@ export async function getServiceEnvrionmentVariables(servicesEnvironmentVariable
 }
 
 
-export async function sendEmail(email: string, deployment: Deployment) {
+export async function sendEmail(deployment: Deployment) {
+    const email = deployment.email;
+    if (email == null) {
+        logger.info(`No email for deployment ${deployment.id}`);
+        return;
+    }
     logger.info(`Sending email to ${email} for deployment ${deployment.id}`);
 
     const deploymentWithServiceAndVendor = await prisma.deployment.findUnique({

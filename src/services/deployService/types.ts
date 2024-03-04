@@ -15,6 +15,8 @@ export type ServicesEnvironmentVariables = {
 
 export const AWS_REGION = 'us-east-1';
 
-export const IMAGE_ID = 'ami-0e731c8a588258d0d';
-
-export const INSTANCE_TYPE = 't2.medium' as _InstanceType;
+export type InstanceSettings = {
+    operatingSystem: string,
+    instanceType: _InstanceType,
+    storageVolumeSize: number
+}

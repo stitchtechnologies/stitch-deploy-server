@@ -1,12 +1,14 @@
 import {
+    DescribeImagesCommand,
     DescribeInstancesCommand,
     ResourceType,
     RunInstancesCommand,
+    RunInstancesCommandInput,
 } from '@aws-sdk/client-ec2';
 import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
-import { DeploymentKey, IMAGE_ID, INSTANCE_TYPE, ServicesEnvironmentVariables } from './types';
+import { DeploymentKey, InstanceSettings, ServicesEnvironmentVariables } from './types';
 import { prisma } from './db';
 import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables, sendEmail, updateDeploymentStatus } from './utils';
 import { combineScripts, deployCdk, generateEnvFileScript, generateUserDataScript } from './script-utils';
@@ -73,27 +75,48 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     const finalScript = combineScripts(script, envFileScript, deploymentId);
     const base64Script = encode(finalScript);
 
-    const params = {
-        ImageId: IMAGE_ID,
-        InstanceType: INSTANCE_TYPE,
-        MinCount: 1,
-        MaxCount: 1,
-        UserData: base64Script,
-        TagSpecifications: [
-            {
-                ResourceType: ResourceType.instance,
-                Tags: [
-                    {
-                        Key: 'Name',
-                        Value: `${service.title} ${new Date().toISOString()}`,
-                    },
-                ],
-            },
-        ],
+    const instanceSettings: InstanceSettings = service.instanceSettings as InstanceSettings || {
+        operatingSystem: 'ami-0440d3b780d96b29d',
+        instanceType: 't2.medium',
+        storageVolumeSize: 8,
     };
 
     try {
         const ec2Client = getEc2Client(keys.accessKey, keys.secretAccessKey);
+
+        const describeImagesCommand = new DescribeImagesCommand({ ImageIds: [instanceSettings.operatingSystem] });
+        const imageDescription = await ec2Client.send(describeImagesCommand);
+        if (!imageDescription.Images || imageDescription.Images.length === 0) {
+            throw new Error(`Image ${instanceSettings.operatingSystem} not found`);
+        }
+
+        const params: RunInstancesCommandInput = {
+            ImageId: instanceSettings.operatingSystem,
+            InstanceType: instanceSettings.instanceType,
+            BlockDeviceMappings: [
+                {
+                    DeviceName: imageDescription.Images[0].RootDeviceName,
+                    Ebs: {
+                        VolumeSize: instanceSettings.storageVolumeSize,
+                    },
+                },
+            ],
+            MinCount: 1,
+            MaxCount: 1,
+            UserData: base64Script,
+            TagSpecifications: [
+                {
+                    ResourceType: ResourceType.instance,
+                    Tags: [
+                        {
+                            Key: 'Name',
+                            Value: `${service.title} ${new Date().toISOString()}`,
+                        },
+                    ],
+                },
+            ],
+        };
+
         const data = await ec2Client.send(new RunInstancesCommand(params));
 
         const awsInstanceId = getInstancesOrThrow(data.Instances).InstanceId;
@@ -235,6 +258,7 @@ async function tryGetPublicDns(deployment: Deployment) {
                 status: 'complete',
             },
         });
+        await sendEmail(deployment);
     }
     await prisma.deployment.update({
         where: {
@@ -256,7 +280,7 @@ async function tryValidateService(deployment: Deployment) {
         }
         logger.info(`Pinging ${url} for ${deployment.id}`);
         const response = await axios.get(url!);
-        if ((response.status - 200) < 100) {
+        if (response.status < 300) {
             await updateDeploymentStatus(deployment.id, 'complete');
             await prisma.install.update({
                 where: {
@@ -266,9 +290,7 @@ async function tryValidateService(deployment: Deployment) {
                     status: 'complete',
                 },
             });
-            if (deployment.email != null) {
-                await sendEmail(deployment.email, deployment);
-            }
+            await sendEmail(deployment);
         }
     } catch {
         // frontend will retry
