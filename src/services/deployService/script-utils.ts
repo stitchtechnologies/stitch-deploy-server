@@ -9,14 +9,16 @@ import http from 'isomorphic-git/http/node';
 import shell from 'shelljs';
 
 export function generateEnvFileScript(servicesEnvironmentVariables: Record<string, string>[]) {
-    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries).map(([key, value]) => `${key}="${value}"`).join('\n');
+    const keyValues = servicesEnvironmentVariables.flatMap(Object.entries)
+        .map(([key, value]) => `${key}="${value}"`)
+        .join('\n');
     return `cat << EOF > .env
 ${keyValues}
 EOF
 source .env`;
 }
 
-export function combineScripts(mainScript: string, envScript: string) {
+export function combineScripts(mainScript: string, envScript: string, installId: string) {
     let combinedScript = '';
     const hasHeader = mainScript.trim().startsWith('#!/bin/bash');
     if (hasHeader) {
@@ -27,7 +29,22 @@ export function combineScripts(mainScript: string, envScript: string) {
 
     if (hasHeader) {
         combinedScript += mainScript.replace('#!/bin/bash', '');
+        combinedScript += '\n';
     }
+    combinedScript += '\n';
+    combinedScript += `
+mkdir -p /stitch
+
+wget -O /stitch/stitch_agent https://stitch-agent.s3.amazonaws.com/stitch_agent
+chmod +x /stitch/stitch_agent
+
+cat << EOF > .env
+INSTALL_ID=${installId}
+EOF
+source .env
+
+nohup /stitch/stitch_agent &`;
+
     return combinedScript;
 }
 

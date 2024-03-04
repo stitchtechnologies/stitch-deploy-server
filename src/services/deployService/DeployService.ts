@@ -69,7 +69,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
     const script = generateUserDataScript(service);
     const envVars = await getServiceEnvrionmentVariables(servicesEnvironmentVariables, service.id);
     const envFileScript = generateEnvFileScript(envVars);
-    const finalScript = combineScripts(script, envFileScript);
+    const finalScript = combineScripts(script, envFileScript, deploymentId);
     const base64Script = encode(finalScript);
 
     const params = {
