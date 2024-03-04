@@ -61,7 +61,6 @@ async function appendLogToS3File(installId: string, logMessage: string) {
     };
 
     await s3.putObject(putObjectParams).promise();
-    console.log('Log appended successfully');
   } catch (error) {
     console.error('Error in appendLogToS3File:', error);
   }
@@ -75,7 +74,6 @@ const ping = (time: string, url: string) => {
 };
 
 const writeLogs = (installId: string, logs: Record<string, string>) => {
-  console.log("logs to s3", logs);
   const concatLogs = Object.values(logs).join("\n");
   appendLogToS3File(installId, concatLogs);
 
