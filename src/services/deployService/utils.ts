@@ -2,6 +2,10 @@ import { EC2Client, Instance } from '@aws-sdk/client-ec2';
 import { AWS_REGION, ServicesEnvironmentVariables } from './types';
 import { prisma } from './db';
 import { JsonObject } from '@prisma/client/runtime/library';
+import { Deployment } from '@prisma/client';
+import logger from 'jet-logger';
+import EnvVars from '@src/constants/EnvVars';
+import sgMail, { MailDataRequired } from '@sendgrid/mail';
 
 export const updateDeploymentStatus = async (id: string, status: string) => {
     const deployment = await prisma.deployment.update({
@@ -88,4 +92,40 @@ export async function getServiceEnvrionmentVariables(servicesEnvironmentVariable
     });
 
     return envVars;
+}
+
+
+export async function sendEmail(email: string, deployment: Deployment) {
+    logger.info(`Sending email to ${email} for deployment ${deployment.id}`);
+
+    const deploymentWithServiceAndVendor = await prisma.deployment.findUnique({
+        where: {
+            id: deployment.id,
+        },
+        include: {
+            Service: true,
+            Vendor: true,
+        },
+    });
+
+    if (!deploymentWithServiceAndVendor) {
+        throw new Error('Deployment not found');
+    }
+
+    const API_KEY = EnvVars.SendGrid.ApiKey;
+    sgMail.setApiKey(API_KEY);
+    const msg: MailDataRequired = {
+        to: email,
+        from: 'deploy@stitch.tech',
+        templateId: 'd-a6e3958e373f4a86bb265fb09db54e74',
+        dynamicTemplateData: {
+            deploymentUrl: `https://deploy.stitch.tech/${deploymentWithServiceAndVendor.Vendor.slug}/${deploymentWithServiceAndVendor.Service.slug}?did=${deployment.id}`,
+            emailBody: '🚀',
+        },
+    };
+    sgMail.send(msg).then((res) => {
+        logger.info(`Email sent to ${email} for deployment ${deployment.id} ${JSON.stringify(res)}`);
+    }).catch((error) => {
+        logger.err(`Error sending email to ${email} for deployment ${deployment.id} ${JSON.stringify(error)}`);
+    })
 }

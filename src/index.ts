@@ -25,6 +25,8 @@ const updateDeploymentStatuses = async () => {
       },
     });
 
+    logger.info(`${deployments.length} deployment(s) to update`);
+
     await Promise.all(deployments.map(updateStatus));
 
     logger.info(`${deployments.length} deployment(s) updated`);

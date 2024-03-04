@@ -29,4 +29,7 @@ export default {
     AccessKey: process.env.AWS_ACCESS_KEY ?? '',
     Secret: process.env.AWS_SECRET ?? '',
   },
+  SendGrid: {
+    ApiKey: process.env.SENDGRID_API_KEY ?? '',
+  },
 } as const;

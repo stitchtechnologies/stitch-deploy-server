@@ -8,13 +8,13 @@ import { v4 } from 'uuid';
 import axios from 'axios';
 import { DeploymentKey, IMAGE_ID, INSTANCE_TYPE, ServicesEnvironmentVariables } from './types';
 import { prisma } from './db';
-import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables, updateDeploymentStatus } from './utils';
+import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables, sendEmail, updateDeploymentStatus } from './utils';
 import { combineScripts, deployCdk, generateEnvFileScript, generateUserDataScript } from './script-utils';
 import { DeploymentScript } from '@src/models/deploy';
 import { Deployment } from '@prisma/client';
 import logger from 'jet-logger';
 
-async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey) {
+async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey, email?: string) {
     const service = await prisma.service.findUnique({
         where: {
             id: serviceId,
@@ -53,6 +53,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
                         id: vendorId,
                     },
                 },
+                email,
             },
         });
 
@@ -117,6 +118,7 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
                         id: vendorId,
                     },
                 },
+                email,
             },
         });
 
@@ -264,6 +266,9 @@ async function tryValidateService(deployment: Deployment) {
                     status: 'complete',
                 },
             });
+            if (deployment.email != null) {
+                await sendEmail(deployment.email, deployment);
+            }
         }
     } catch {
         // frontend will retry

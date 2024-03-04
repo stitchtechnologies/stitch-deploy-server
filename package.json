@@ -29,6 +29,7 @@
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.515.0",
     "@prisma/client": "^5.9.1",
+    "@sendgrid/mail": "^8.1.1",
     "aws-sdk": "^2.1569.0",
     "axios": "^1.6.7",
     "base-64": "^1.0.0",
