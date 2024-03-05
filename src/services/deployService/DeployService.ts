@@ -145,19 +145,6 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
             },
         });
 
-        // record the install in the database
-        await prisma.install.create({
-            data: {
-                id: deploymentId,
-                status: 'deployed',
-                Service: {
-                    connect: {
-                        id: serviceId,
-                    },
-                },
-            },
-        });
-
         return deployment;
     } catch (err) {
         console.error('error', err);
@@ -207,14 +194,6 @@ export async function updateStatus(deployment: Deployment) {
 
 async function tryGetPublicDns(deployment: Deployment) {
     await updateDeploymentStatus(deployment.id, 'booting');
-    await prisma.install.update({
-        where: {
-            id: deployment.id,
-        },
-        data: {
-            status: 'booting',
-        },
-    });
     const deploymentKey = await getDeploymentKey(deployment.id);
     const ec2Client = getEc2Client(deploymentKey.accessKey, deploymentKey.secretAccessKey);
     const data = await ec2Client.send(new DescribeInstancesCommand({
@@ -239,25 +218,9 @@ async function tryGetPublicDns(deployment: Deployment) {
     if (deployment.validationUrl) {
         newUserFriendlyUrl = deployment.validationUrl.replace('{{HOSTNAME}}', newPublicDns);
         await updateDeploymentStatus(deployment.id, 'booted');
-        await prisma.install.update({
-            where: {
-                id: deployment.id,
-            },
-            data: {
-                status: 'booted',
-            },
-        });
     } else {
         // if validation url is not go straight to complete
         await updateDeploymentStatus(deployment.id, 'complete');
-        await prisma.install.update({
-            where: {
-                id: deployment.id,
-            },
-            data: {
-                status: 'complete',
-            },
-        });
         await sendEmail(deployment);
     }
     await prisma.deployment.update({
@@ -282,14 +245,6 @@ async function tryValidateService(deployment: Deployment) {
         const response = await axios.get(url!);
         if (response.status < 300) {
             await updateDeploymentStatus(deployment.id, 'complete');
-            await prisma.install.update({
-                where: {
-                    id: deployment.id,
-                },
-                data: {
-                    status: 'complete',
-                },
-            });
             await sendEmail(deployment);
         }
     } catch {
