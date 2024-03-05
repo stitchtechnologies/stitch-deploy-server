@@ -1,6 +1,6 @@
 import { EC2Client, Instance } from '@aws-sdk/client-ec2';
 import { AWS_REGION, ServicesEnvironmentVariables } from './types';
-import { prisma } from './db';
+import { prisma } from '../../util/db';
 import { JsonObject } from '@prisma/client/runtime/library';
 import { Deployment } from '@prisma/client';
 import logger from 'jet-logger';

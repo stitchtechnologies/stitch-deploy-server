@@ -1,9 +1,7 @@
 import * as AWS from 'aws-sdk';
-import { GetObjectRequest, PutObjectRequest } from 'aws-sdk/clients/s3';
 import EnvVars from '@src/constants/EnvVars';
-const pingTimes: { time: string, url: string }[] = [];
-
-
+import { prisma } from '../../util/db';
+import logger from 'jet-logger';
 
 // Configure the AWS region and credentials
 const s3 = new AWS.S3({
@@ -65,21 +63,25 @@ async function appendLogToS3File(installId: string, logMessage: string) {
     console.error('Error in appendLogToS3File:', error);
   }
 }
-// Run the function
-
-
-const ping = (time: string, url: string) => {
-  pingTimes.push({ time, url });
-  return pingTimes;
-};
 
 const writeLogs = (installId: string, logs: Record<string, string>) => {
   const concatLogs = Object.values(logs).join("\n");
   appendLogToS3File(installId, concatLogs);
+};
 
-}
+const checkCommands = async (installId: string) => {
+  logger.info(`Checking commands for installId ${installId}`);
+  // there should only be one incomplete/non-failed command at a time. for now we just want to process not acknowledged commands
+  const unacknowledgedCommand = await prisma.command.findFirst({
+    where: {
+      deploymentId: installId,
+      status: "NOT_ACKNOWLEGED",
+    },
+  });
+  return unacknowledgedCommand;
+};
 
 export default {
-  ping,
-  writeLogs
+  writeLogs,
+  checkCommands,
 } as const;

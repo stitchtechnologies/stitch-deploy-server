@@ -9,7 +9,7 @@ import { encode } from 'base-64';
 import { v4 } from 'uuid';
 import axios from 'axios';
 import { DeploymentKey, InstanceSettings, ServicesEnvironmentVariables } from './types';
-import { prisma } from './db';
+import { prisma } from '../../util/db';
 import { getDeployment, getDeploymentKey, getEc2Client, getInstancesOrThrow, getServiceEnvrionmentVariables, sendEmail, updateDeploymentStatus } from './utils';
 import { combineScripts, deployCdk, generateEnvFileScript, generateUserDataScript } from './script-utils';
 import { DeploymentScript } from '@src/models/deploy';

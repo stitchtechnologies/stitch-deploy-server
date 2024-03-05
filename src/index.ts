@@ -3,7 +3,7 @@ import logger from 'jet-logger';
 
 import EnvVars from '@src/constants/EnvVars';
 import server from './server';
-import { prisma } from './services/deployService/db';
+import { prisma } from './util/db';
 import { updateStatus } from './services/deployService/DeployService';
 
 

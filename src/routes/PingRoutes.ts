@@ -1,10 +1,10 @@
 import HttpStatusCodes from '@src/constants/HttpStatusCodes';
 import { IReq, IRes } from './types/express/misc';
-import PingService from '@src/services/PingService';
+import PingService from '@src/services/pingService/PingService';
 
-function agentPing(req: IReq<{ time: string, url: string, logs: any, installId: string }>, res: IRes) {
+async function agentPing(req: IReq<{ time: string, url: string, logs: any, installId: string }>, res: IRes) {
     PingService.writeLogs(req.body.installId, req.body.logs);
-    const response = PingService.ping(req.body.time, req.body.url);
+    const response = await PingService.checkCommands(req.body.installId);
     return res.status(HttpStatusCodes.OK).json(response);
 }
 
