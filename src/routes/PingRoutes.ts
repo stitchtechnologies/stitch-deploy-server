@@ -27,7 +27,7 @@ type CommandData = {
         CompletedAt: string | null;
         Type: string;
         Data: {
-            version: string;
+            [key: string]: unknown;
         };
         Status: string;
         TriggeredBy: string;
