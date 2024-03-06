@@ -72,13 +72,44 @@ const writeLogs = async (installId: string, logs: Record<string, string>) => {
 const checkCommands = async (deploymentId: string) => {
   logger.info(`Checking commands for deploymentId ${deploymentId}`);
   // there should only be one incomplete/non-failed command at a time. for now we just want to process not acknowledged commands
-  const unacknowledgedCommand = await prisma.command.findFirst({
+  const command = await prisma.command.findFirst({
     where: {
       deploymentId,
-      status: "NOT_ACKNOWLEGED",
+      status: {
+        notIn: ['FAILED', 'COMPLETED'],
+      },
     },
   });
-  return unacknowledgedCommand;
+
+  if (!command) {
+    return null;
+  }
+
+  const deploymentAndService = await prisma.deployment.findUnique({
+    where: {
+      id: deploymentId,
+    },
+    include: {
+      Service: true,
+    },
+  });
+
+  if (!deploymentAndService) {
+    throw new Error(`Deployment with id ${deploymentId} not found`);
+  }
+
+  if (deploymentAndService.Service == null) {
+    throw new Error(`Service with id ${deploymentAndService.serviceId} not found`);
+  }
+
+  const newData = {
+    ...(command.data as Record<string, unknown>),
+    service: deploymentAndService.Service,
+  };
+
+  const res = { ...command, data: newData };
+
+  return res;
 };
 
 export default {

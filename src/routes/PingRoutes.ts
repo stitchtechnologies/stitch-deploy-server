@@ -45,6 +45,13 @@ async function processCommand(req: IReq<{ installId: string, commandData: Comman
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         const newStatus = commandData.data.status as string;
         const agentCommand = commandData.command;
+        let additionalUpdates = {};
+
+        if (newStatus === "COMPLETED") {
+            additionalUpdates = {
+                completedAt: new Date().toISOString(),
+            };
+        }
 
         // update command status
         await prisma.command.update({
@@ -53,6 +60,7 @@ async function processCommand(req: IReq<{ installId: string, commandData: Comman
             },
             data: {
                 status: newStatus,
+                ...additionalUpdates,
             },
         });
 
