@@ -19,6 +19,8 @@ export default {
   },
   Ping: {
     Base: '/agent',
-    PingAgent: '/ping',
+    WriteLogs: '/writeLogs',
+    GetLatestCommand: '/getLatestCommand/:deploymentId',
+    ProcessCommand: '/processCommand',
   },
 } as const;

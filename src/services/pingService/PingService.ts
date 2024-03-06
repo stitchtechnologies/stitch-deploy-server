@@ -64,17 +64,17 @@ async function appendLogToS3File(installId: string, logMessage: string) {
   }
 }
 
-const writeLogs = (installId: string, logs: Record<string, string>) => {
+const writeLogs = async (installId: string, logs: Record<string, string>) => {
   const concatLogs = Object.values(logs).join("\n");
-  appendLogToS3File(installId, concatLogs);
+  await appendLogToS3File(installId, concatLogs);
 };
 
-const checkCommands = async (installId: string) => {
-  logger.info(`Checking commands for installId ${installId}`);
+const checkCommands = async (deploymentId: string) => {
+  logger.info(`Checking commands for deploymentId ${deploymentId}`);
   // there should only be one incomplete/non-failed command at a time. for now we just want to process not acknowledged commands
   const unacknowledgedCommand = await prisma.command.findFirst({
     where: {
-      deploymentId: installId,
+      deploymentId,
       status: "NOT_ACKNOWLEGED",
     },
   });

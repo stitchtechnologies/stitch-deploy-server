@@ -66,8 +66,18 @@ apiRouter.use(Paths.Deploy.Base, deployRouter);
 const pingRouter = Router();
 
 pingRouter.post(
-  Paths.Ping.PingAgent,
-  PingRoutes.agentPing,
+  Paths.Ping.WriteLogs,
+  PingRoutes.writeLogs,
+);
+
+pingRouter.get(
+  Paths.Ping.GetLatestCommand,
+  PingRoutes.getLatestCommand,
+);
+
+pingRouter.post(
+  Paths.Ping.ProcessCommand,
+  PingRoutes.processCommand,
 );
 
 apiRouter.use(Paths.Ping.Base, pingRouter);
