@@ -32,7 +32,6 @@ export function isCurrentTimeWithinMaintenanceWindow(
     const endTimeMinute = parseInt(endTime.split(':')[1]);
     const isStartTimeAM = startTime.includes('AM');
     const isEndTimeAM = endTime.includes('AM');
-    const isCurrentTimeAM = currentHour < 12;
 
     // check that the current day is between the startDay and endDay
     if (currentDayIndex < startDayIndex || currentDayIndex > endDayIndex) {
@@ -40,11 +39,10 @@ export function isCurrentTimeWithinMaintenanceWindow(
     }
 
     // check that the current time is between the startTime and endTime
-    // handle AM and PM
-    if (isStartTimeAM && !isCurrentTimeAM) {
+    if (!isStartTimeAM) {
         startTimeHour += 12;
     }
-    if (isEndTimeAM && !isCurrentTimeAM) {
+    if (!isEndTimeAM) {
         endTimeHour += 12;
     }
     if (currentHour < startTimeHour || currentHour > endTimeHour) {
