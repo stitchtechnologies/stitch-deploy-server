@@ -16,7 +16,17 @@ import { DeploymentScript } from '@src/models/deploy';
 import { Deployment } from '@prisma/client';
 import logger from 'jet-logger';
 
-async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVariables: ServicesEnvironmentVariables, keys: DeploymentKey, email?: string) {
+async function Deploy(vendorId: string,
+    serviceId: string,
+    servicesEnvironmentVariables: ServicesEnvironmentVariables,
+    keys: DeploymentKey,
+    email?: string,
+    maintenanceWindow?: {
+        startDay: string;
+        startTime: string;
+        endDay: string;
+        endTime: string;
+    }) {
     const service = await prisma.service.findUnique({
         where: {
             id: serviceId,
@@ -45,6 +55,10 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
                 validationUrl: service.validationUrl,
                 userFriendlyUrl: "",
                 deploymentKey: keys,
+                maintenanceWindowStartDay: maintenanceWindow?.startDay,
+                maintenanceWindowStartTime: maintenanceWindow?.startTime,
+                maintenanceWindowEndDay: maintenanceWindow?.endDay,
+                maintenanceWindowEndTime: maintenanceWindow?.endTime,
                 Service: {
                     connect: {
                         id: serviceId,
@@ -131,6 +145,10 @@ async function Deploy(vendorId: string, serviceId: string, servicesEnvironmentVa
                 awsInstanceId,
                 validationUrl: service.validationUrl,
                 deploymentKey: keys,
+                maintenanceWindowStartDay: maintenanceWindow?.startDay,
+                maintenanceWindowStartTime: maintenanceWindow?.startTime,
+                maintenanceWindowEndDay: maintenanceWindow?.endDay,
+                maintenanceWindowEndTime: maintenanceWindow?.endTime,
                 Service: {
                     connect: {
                         id: serviceId,

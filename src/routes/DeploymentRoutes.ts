@@ -12,13 +12,19 @@ async function startDeployment(req: IReq<{
     accountNumber?: string,
     awsRegion?: string,
     email?: string,
+    maintenanceWindow?: {
+        startDay: string;
+        startTime: string;
+        endDay: string;
+        endTime: string;
+    }
 }>, res: IRes) {
     const response = await DeployService.Deploy(req.body.vendorId, req.body.serviceId, req.body.servicesEnvironmentVariables, {
         accessKey: req.body.accessKey,
         secretAccessKey: req.body.secret,
         awsRegion: req.body.awsRegion,
         accountNumber: req.body.accountNumber,
-    }, req.body.email);
+    }, req.body.email, req.body.maintenanceWindow);
     return res.status(HttpStatusCodes.OK).json(response);
 }
 

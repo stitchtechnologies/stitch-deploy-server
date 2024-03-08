@@ -2,6 +2,7 @@ import * as AWS from 'aws-sdk';
 import EnvVars from '@src/constants/EnvVars';
 import { prisma } from '../../util/db';
 import logger from 'jet-logger';
+import { isCurrentTimeWithinMaintenanceWindow } from './utils';
 
 // Configure the AWS region and credentials
 const s3 = new AWS.S3({
@@ -79,6 +80,9 @@ const checkCommands = async (deploymentId: string) => {
         notIn: ['FAILED', 'COMPLETED'],
       },
     },
+    include: {
+      Deployment: true,
+    },
   });
 
   if (!command) {
@@ -100,6 +104,13 @@ const checkCommands = async (deploymentId: string) => {
 
   if (deploymentAndService.Service == null) {
     throw new Error(`Service with id ${deploymentAndService.serviceId} not found`);
+  }
+
+  const maintenanceWindowIsSet = [deploymentAndService.maintenanceWindowStartDay, deploymentAndService.maintenanceWindowStartTime, deploymentAndService.maintenanceWindowEndDay, deploymentAndService.maintenanceWindowEndTime].every((item) => item != null);
+  const overrideMaintenanceWindow = command.overrideMaintenanceWindow || false;
+  if (!overrideMaintenanceWindow && maintenanceWindowIsSet && !isCurrentTimeWithinMaintenanceWindow(deploymentAndService.maintenanceWindowStartDay as string, deploymentAndService.maintenanceWindowStartTime as string, deploymentAndService.maintenanceWindowEndDay as string, deploymentAndService.maintenanceWindowEndTime as string)) {
+    logger.info('Current time is not within the maintenance window');
+    return null;
   }
 
   const newData = {
