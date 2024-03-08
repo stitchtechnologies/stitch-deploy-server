@@ -112,7 +112,31 @@ const checkCommands = async (deploymentId: string) => {
   return res;
 };
 
+const sendStatus = async (deploymentId: string, info: Record<string, any>) => {
+  logger.info(`Sending status for deploymentId ${deploymentId}`);
+  const deployment = await prisma.deployment.findUnique({
+    where: {
+      id: deploymentId,
+    },
+  });
+
+  if (!deployment) {
+    throw new Error(`Deployment with id ${deploymentId} not found`);
+  }
+
+  // update deployment info
+  await prisma.deployment.update({
+    where: {
+      id: deploymentId,
+    },
+    data: {
+      info,
+    },
+  });
+};
+
 export default {
   writeLogs,
   checkCommands,
+  sendStatus,
 } as const;

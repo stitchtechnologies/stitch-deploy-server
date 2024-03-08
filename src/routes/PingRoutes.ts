@@ -4,6 +4,18 @@ import PingService from '@src/services/pingService/PingService';
 import logger from 'jet-logger';
 import { prisma } from '@src/util/db';
 
+async function sendStatus(req: IReq<
+    {
+        deploymentId: string;
+        info: {
+            [key: string]: unknown;
+        }
+    }
+>, res: IRes) {
+    await PingService.sendStatus(req.body.deploymentId, req.body.info);
+    return res.status(HttpStatusCodes.OK).json({ message: 'Status sent successfully' });
+}
+
 async function writeLogs(req: IReq<{ installId: string, logs: any }>, res: IRes) {
     await PingService.writeLogs(req.body.installId, req.body.logs);
     return res.status(HttpStatusCodes.OK).json({ message: 'Logs written successfully' });
@@ -72,4 +84,5 @@ export default {
     writeLogs,
     getLatestCommand,
     processCommand,
+    sendStatus,
 } as const;

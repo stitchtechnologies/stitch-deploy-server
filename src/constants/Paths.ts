@@ -22,5 +22,6 @@ export default {
     WriteLogs: '/writeLogs',
     GetLatestCommand: '/getLatestCommand/:deploymentId',
     ProcessCommand: '/processCommand',
+    SendStatus: '/sendStatus',
   },
 } as const;
